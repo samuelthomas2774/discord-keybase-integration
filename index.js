@@ -50,6 +50,13 @@ module.exports = (Plugin, PluginApi, Vendor) => {
             .kbi-button {
                 padding: 8px 15px;
                 border-radius: 3px;
+            }
+
+            [data-channel-id="${KEYBASE_PROOFS_CHANNEL}"] svg[name="People"],
+            [data-channel-id="${KEYBASE_PROOFS_CHANNEL}"] [class*="membersWrap-"],
+            [data-channel-id="441653700260528130"] svg[name="People"],
+            [data-channel-id="441653700260528130"] [class*="membersWrap-"] {
+                display: none;
             }`);
 
             // Check if the user is in the proofs server, if not ask them to join
