@@ -14,6 +14,11 @@ This is a plugin for BetterDiscord v2, which is currently in development. It als
 Installation
 ---
 
-To install [download and unzip the latest `release.zip` from GitHub](https://github.com/samuelthomas2774/discord-keybase-integration/releases) to BetterDiscord's `ext/plugins` directory.
+To install [download and unzip the latest `release.zip` from GitHub](https://github.com/samuelthomas2774/discord-keybase-integration/releases/latest) to BetterDiscord's `ext/plugins` directory.
 
 For more information about how to actually use the plugin and add proofs, see the support server (you have to join the server to post and verify proofs anyway at the moment).
+
+Screenshots
+---
+
+![The user profile modal showing a Keybase proof](images/user-profile-modal-1.png)
