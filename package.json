@@ -2,5 +2,12 @@
     "dependencies": {
         "axios": "^0.18.0",
         "kbpgp": "^2.0.77"
+    },
+    "devDependencies": {
+        "archiver": "^2.1.1",
+        "del": "^3.0.0",
+        "gulp": "^4.0.0",
+        "gulp-npm-copy-deps": "^1.0.2",
+        "pump": "^3.0.0"
     }
 }
