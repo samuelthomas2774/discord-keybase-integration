@@ -171,6 +171,8 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                         throw new Error('`proof.keybase_proof` was not set to `discord`.');
                     if (proof.discord !== user_id)
                         throw new Error('`proof.discord` does not match the user ID.');
+                    if (proof.keybase !== message.object.keybase)
+                        throw new Error('`proof.keybase` does not match the Keybase username.');
                     if (filter && proofs.find(p => p.keybase === proof.keybase))
                         continue;
 
