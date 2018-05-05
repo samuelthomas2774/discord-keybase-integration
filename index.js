@@ -61,8 +61,7 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
             // Check if the user is in the proofs server, if not ask them to join
             const proofsGuild = DiscordApi.Guild.fromId(KEYBASE_PROOFS_GUILD);
-            if (!proofsGuild)
-                this.askUserToJoinGuild();
+            if (!proofsGuild) this.askUserToJoinGuild();
         }
 
         onstop() {
@@ -114,6 +113,9 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
                 if (signatureMatch && signatureMatch[1] && objectMatch && objectMatch[1]) proofs.push({
                     object: JSON.parse(objectMatch[1]),
+                    guild_id: KEYBASE_PROOFS_GUILD,
+                    channel_id: KEYBASE_PROOFS_CHANNEL,
+                    message_id: message.id,
                     signature: signatureMatch[1]
                 });
             }
@@ -172,6 +174,9 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                     if (filter && proofs.find(p => p.keybase === proof.keybase))
                         continue;
 
+                    proof.guild_id = message.guild_id;
+                    proof.channel_id = message.channel_id;
+                    proof.message_id = message.message_id;
                     proofs.push(proof);
                 } catch (err) {
                     Logger.err(err);
@@ -252,19 +257,7 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
                         const connectedAccounts = retVal.props.children[1].props.children;
                         for (let proof of proofs) {
-                            connectedAccounts.props.children.splice(proof.position || 0, 0, React.createElement('div', {
-                                className: 'flex-1xMQg5 flex-1O1GKY horizontal-1ae9ci horizontal-2EEEnY flex-1O1GKY directionRow-3v3tfG justifyStart-2NDFzi alignCenter-1dQNNs noWrap-3jynv6 connectedAccount-36nQx7'
-                            }, React.createElement('img', {
-                                className: 'connectedAccountIcon-3P3V6F',
-                                src: 'https://keybase.io/images/icons/icon-keybase-logo-48.png'
-                            }), React.createElement('div', {
-                                className: 'connectedAccountNameInner-1phBvE flex-1O1GKY alignCenter-1dQNNs' + ' connectedAccountName-f8AEe2',
-                            }, proof.keybase, Api.plugin.renderVerifiedIcon()), React.createElement('a', {
-                                href: `https://keybase.io/${proof.keybase}`,
-                                target: '_blank'
-                            }, React.createElement('div', {
-                                className: 'connectedAccountOpenIcon-2cNbq5'
-                            }))));
+                            connectedAccounts.props.children.splice(proof.position || 0, 0, Api.plugin.renderKeybaseAccount(proof));
                         }
                     } catch (err) {
                         Logger.err('Error thrown while rendering a UserInfoSection', err);
@@ -274,7 +267,23 @@ module.exports = (Plugin, PluginApi, Vendor) => {
             };
         }
 
-        renderVerifiedIcon() {
+        renderKeybaseAccount(proof) {
+            return React.createElement('div', {
+                className: 'flex-1xMQg5 flex-1O1GKY horizontal-1ae9ci horizontal-2EEEnY flex-1O1GKY directionRow-3v3tfG justifyStart-2NDFzi alignCenter-1dQNNs noWrap-3jynv6 connectedAccount-36nQx7'
+            }, React.createElement('img', {
+                className: 'connectedAccountIcon-3P3V6F',
+                src: 'https://keybase.io/images/icons/icon-keybase-logo-48.png'
+            }), React.createElement('div', {
+                className: 'connectedAccountNameInner-1phBvE flex-1O1GKY alignCenter-1dQNNs' + ' connectedAccountName-f8AEe2',
+            }, proof.keybase, this.renderVerifiedIcon(proof)), React.createElement('a', {
+                href: `https://keybase.io/${proof.keybase}`,
+                target: '_blank'
+            }, React.createElement('div', {
+                className: 'connectedAccountOpenIcon-2cNbq5'
+            })));
+        }
+
+        renderVerifiedIcon(proof) {
             const Tooltips = WebpackModules.getModule(m => m.hide && m.show && !m.search && !m.submit && !m.search && !m.activateRagingDemon && !m.dismiss);
 		    const id = WebpackModules.KeyGenerator();
             let svgElement;
@@ -285,6 +294,13 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                 width: "24",
                 height: "20",
                 viewBox: "0 0 20 20",
+                onClick(event) {
+                    Logger.log('Clicked verified icon', proof);
+                    if (proof.guild_id && proof.channel_id && proof.message_id) {
+                        WebpackModules.UserProfileModal.close();
+                        WebpackModules.NavigationUtils.transitionTo(`/channels/${proof.guild_id}/${proof.channel_id}?jump=${proof.message_id}`);
+                    }
+                },
                 onMouseOver(event) {
                     if (event.target.tagName !== 'svg') return;
                     svgElement = event.target;
