@@ -128,14 +128,23 @@ module.exports = (Plugin, PluginApi, Vendor) => {
          * @param {Number} user_id The ID of the user
          * @return {Promise => Array}
          */
-        async getUserProofs(user_id, suppressErrors = true, filter = true) {
+        async getUserProofs(user_id) {
             const proofs = [];
-            const failedProofs = [];
             const keybaseUsers = new Map();
 
             for (let message of await this.getUserProofMessages(user_id)) {
+                const proof = {
+                    guild_id: message.guild_id,
+                    channel_id: message.channel_id,
+                    message_id: message.message_id,
+                    message,
+                    valid: false,
+                    duplicate: false,
+                    error: undefined
+                };
+
                 try {
-                    const pgp_msg = `-----BEGIN PGP MESSAGE-----\n\n${message.signature}\n-----END PGP MESSAGE-----`;
+                    const pgp_msg = proof.pgp_msg = `-----BEGIN PGP MESSAGE-----\n\n${message.signature}\n-----END PGP MESSAGE-----`;
 
                     if (!keybaseUsers.has(message.object.keybase)) {
                         const fingerprints = [];
@@ -151,46 +160,56 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                     }
 
                     const {fingerprints, ring} = keybaseUsers.get(message.object.keybase);
+                    proof.keybase_fingerprints = fingerprints;
 
                     const literals = await kbpgpVerify({keyfetch: ring, armored: pgp_msg});
                     Logger.log('Signed message', literals[0].toString());
                     const signer = literals[0].get_data_signer();
                     const signerKeyManager = signer.get_key_manager();
-                    const fingerprint = signerKeyManager.get_pgp_fingerprint_str();
+                    const fingerprint = proof.fingerprint = signerKeyManager.get_pgp_fingerprint_str();
 
                     Logger.log('Fingerprints:', {fingerprints, fingerprint});
                     if (!fingerprints.includes(fingerprint)) {
-                        failedProofs.push({fingerprints, fingerprint});
-                        continue;
+                        throw new Error('Signature is not valid.');
                     }
 
                     Logger.log('Fingerprint matches!');
-                    const proof = JSON.parse(literals[0].toString());
+                    Object.assign(proof, JSON.parse(literals[0].toString()), Object.assign({}, proof));
 
                     if (proof.keybase_proof !== 'discord')
                         throw new Error('`proof.keybase_proof` was not set to `discord`.');
                     if (proof.discord !== user_id)
                         throw new Error('`proof.discord` does not match the user ID.');
+                    if (message.object.discord_id && proof.discord !== message.object.discord_id)
+                        throw new Error('`proof.discord` does not match the user ID.');
                     if (proof.keybase !== message.object.keybase)
                         throw new Error('`proof.keybase` does not match the Keybase username.');
-                    if (filter && proofs.find(p => p.keybase === proof.keybase))
-                        continue;
 
-                    proof.guild_id = message.guild_id;
-                    proof.channel_id = message.channel_id;
-                    proof.message_id = message.message_id;
-                    proofs.push(proof);
+                    proof.valid = true;
                 } catch (err) {
                     Logger.err(err);
-                    failedProofs.push({err});
+                    proof.error = err;
                 }
-            }
 
-            if ((!suppressErrors || !proofs.length) && failedProofs.length) {
-                throw new Error('All proofs failed.', failedProofs);
+                for (let p of proofs) {
+                    if (p.keybase !== proof.keybase || p.discord_id !== proof.discord_id) continue;
+                    else if (p.valid) proof.duplicate = true;
+                    else if (proof.valid) p.duplicate = true;
+                }
+
+                proofs.push(proof);
             }
 
             return proofs;
+        }
+
+        /**
+         * Gets all a user's valid proofs.
+         * @param {Number} user_id The ID of the user
+         * @return {Promise => Array}
+         */
+        async getValidUserProofs(user_id) {
+            return (await this.getUserProofs(user_id)).filter(p => p.valid && !p.duplicate);
         }
 
         /**
@@ -219,7 +238,7 @@ module.exports = (Plugin, PluginApi, Vendor) => {
             await Utils.wait(500);
             const user = ReactHelpers.findProp(component, 'user');
             if (!user) return;
-            componentProofs.set(component, await this.getUserProofs(user.id));
+            componentProofs.set(component, await this.getValidUserProofs(user.id));
             component.setState({});
         }
 
@@ -298,9 +317,10 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                 viewBox: "0 0 20 20",
                 onClick(event) {
                     Logger.log('Clicked verified icon', proof);
-                    if (proof.guild_id && proof.channel_id && proof.message_id) {
+                    const {guild_id, channel_id, message_id} = proof.message;
+                    if (guild_id && channel_id && message_id) {
                         WebpackModules.UserProfileModal.close();
-                        WebpackModules.NavigationUtils.transitionTo(`/channels/${proof.guild_id}/${proof.channel_id}?jump=${proof.message_id}`);
+                        WebpackModules.NavigationUtils.transitionTo(`/channels/${guild_id}/${channel_id}?jump=${message_id}`);
                     }
                 },
                 onMouseOver(event) {
