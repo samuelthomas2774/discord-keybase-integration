@@ -101,6 +101,7 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
         get bridge() {
             return this._bridge || (this._bridge = {
+                version: this.version,
                 getUserPublicKeys: this.getUserPublicKeys.bind(this),
                 getUserProofMessages: this.getUserProofMessages.bind(this),
                 getUserProofs: this.getUserProofs.bind(this),
