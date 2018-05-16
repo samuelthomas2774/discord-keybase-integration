@@ -39,17 +39,47 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
         get componentProofs() { return componentProofs }
 
-        onstart() {
+        async onstart() {
             Logger.log('Keybase integration started');
             this.patchUserProfileModal();
 
-            CssUtils.injectStyle(`.kbi-modal-body * {
+            await CssUtils.injectSass(`.kbi-modal-body * {
                 margin: 0 0 15px;
             }
 
             .kbi-button {
                 padding: 8px 15px;
                 border-radius: 3px;
+            }
+
+            .kbi-icon {
+                width: 30px;
+                height: 30px;
+                margin-right: 10px;
+            }
+
+            .kbi-error {
+                margin: 0 20px;
+                padding: 8px 14px 8px 8px;
+                color: #ffffff;
+                background-color: transparentize(#d84040, 0.5);
+                border: 1px solid #d84040;
+                border-radius: 3px;
+                display: flex;
+                align-items: center;
+
+                + .kbi-error {
+                    margin-top: 20px;
+                }
+
+                .kbi-error-text {
+                    flex: 1 1;
+                }
+
+                .kbi-account-open-icon {
+                    cursor: pointer;
+                    filter: contrast(5);
+                }
             }
 
             [data-channel-id="${KEYBASE_PROOFS_CHANNEL}"] svg[name="People"],
@@ -238,7 +268,7 @@ module.exports = (Plugin, PluginApi, Vendor) => {
             await Utils.wait(500);
             const user = ReactHelpers.findProp(component, 'user');
             if (!user) return;
-            componentProofs.set(component, await this.getValidUserProofs(user.id));
+            componentProofs.set(component, await this.getUserProofs(user.id));
             component.setState({});
         }
 
@@ -278,7 +308,10 @@ module.exports = (Plugin, PluginApi, Vendor) => {
 
                         const connectedAccounts = retVal.props.children[1].props.children;
                         for (let proof of proofs) {
-                            connectedAccounts.props.children.splice(proof.position || 0, 0, Api.plugin.renderKeybaseAccount(proof));
+                            if (proof.duplicate) continue;
+                            else if (!proof.valid)
+                                retVal.props.children.splice(1, 0, Api.plugin.renderInvalidKeybaseAccount(proof));
+                            else connectedAccounts.props.children.splice(proof.position || 0, 0, Api.plugin.renderKeybaseAccount(proof));
                         }
                     } catch (err) {
                         Logger.err('Error thrown while rendering a UserInfoSection', err);
@@ -296,12 +329,32 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                 src: 'https://keybase.io/images/icons/icon-keybase-logo-48.png'
             }), React.createElement('div', {
                 className: 'connectedAccountNameInner-1phBvE flex-1O1GKY alignCenter-1dQNNs' + ' connectedAccountName-f8AEe2',
-            }, proof.keybase, this.renderVerifiedIcon(proof)), React.createElement('a', {
+            }, proof.keybase, proof.valid ? this.renderVerifiedIcon(proof) : null), React.createElement('a', {
                 href: `https://keybase.io/${proof.keybase}`,
                 target: '_blank'
             }, React.createElement('div', {
                 className: 'connectedAccountOpenIcon-2cNbq5'
             })));
+        }
+
+        renderInvalidKeybaseAccount(proof) {
+            return React.createElement('div', {
+                className: 'kbi-error'
+            }, React.createElement('img', {
+                className: 'kbi-icon',
+                src: 'https://keybase.io/images/icons/icon-keybase-logo-48.png'
+            }), React.createElement('span', {
+                className: 'kbi-error-text'
+            }, `Invalid proof: ${proof.error}`), React.createElement('div', {
+                className: 'kbi-account-open-icon connectedAccountOpenIcon-2cNbq5',
+                onClick(event) {
+                    const {guild_id, channel_id, message_id} = proof.message;
+                    if (guild_id && channel_id && message_id) {
+                        WebpackModules.UserProfileModal.close();
+                        WebpackModules.NavigationUtils.transitionTo(`/channels/${guild_id}/${channel_id}?jump=${message_id}`);
+                    }
+                }
+            }));
         }
 
         renderVerifiedIcon(proof) {
