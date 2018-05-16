@@ -99,6 +99,15 @@ module.exports = (Plugin, PluginApi, Vendor) => {
             Patcher.unpatchAll();
         }
 
+        get bridge() {
+            return this._bridge || (this._bridge = {
+                getUserPublicKeys: this.getUserPublicKeys.bind(this),
+                getUserProofMessages: this.getUserProofMessages.bind(this),
+                getUserProofs: this.getUserProofs.bind(this),
+                getValidUserProofs: this.getValidUserProofs.bind(this)
+            });
+        }
+
         askUserToJoinGuild() {
             const modal = Modals.add({
                 Modal: Modals.baseComponent,
