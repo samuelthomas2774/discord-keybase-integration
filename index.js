@@ -461,6 +461,14 @@ module.exports = (Plugin, PluginApi, Vendor) => {
                 retVal.keybase_integration_tooltip = undefined;
             });
 
+            // hasLinks property
+            ContentAuthor.computed = ContentAuthor.computed || {};
+            if (ContentAuthor._Ctor) ContentAuthor._Ctor[0].options.computed = ContentAuthor.computed;
+
+            this.unpatchContentAuthorHasLinks = monkeyPatch(ContentAuthor.computed).after('hasLinks', (component, args, retVal, setRetVal) => {
+                setRetVal(retVal || !!component.author.keybase_username);
+            });
+
             // Render function
             this.unpatchContentAuthor = monkeyPatch(ContentAuthor._Ctor ? ContentAuthor._Ctor[0].options : ContentAuthor).after('render', (component, [createElement], retVal, setRetVal) => {
                 if (!component.keybase_integration_username) return;
