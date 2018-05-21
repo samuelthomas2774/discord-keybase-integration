@@ -1,4 +1,6 @@
 
+const electron = require('electron');
+
 const kbpgp = require('kbpgp');
 const axios = require('axios');
 
@@ -424,26 +426,72 @@ module.exports = (Plugin, PluginApi, Vendor) => {
         patchContentAuthor() {
             Logger.log('ContentAuthor', ContentAuthor);
 
-            this.unpatchContentAuthor = monkeyPatch(ContentAuthor._Ctor ? ContentAuthor._Ctor[0].options : ContentAuthor).after('render', (component, [createElement], retVal, setRetVal) => {
-                Logger.log('Rendering ContentAuthor', component, createElement, retVal);
+            // Created event
+            ContentAuthor.created = ContentAuthor.created || [];
+            if (ContentAuthor._Ctor) ContentAuthor._Ctor[0].options.created = ContentAuthor.created;
+            if (!ContentAuthor.created.length) ContentAuthor.created.push(() => {});
 
-                retVal.componentOptions.children[3].children.push(createElement('div', {
-                    staticClass: 'bd-material-button',
-                    directives: [
-                        {
-                            name: "tooltip",
-                            rawName: "v-tooltip",
-                            value: component.author.keybase_username,
-                            expression: "author.keybase_username"
-                        }
-                    ],
-                    on: {
-                        click() {
-                            Logger.log('Open Keybase profile');
-                        }
-                    }
-                }, [this.renderMiKeybase(createElement)]));
+            this.unpatchContentAuthorCreated = monkeyPatch(ContentAuthor.created).after(0, async (component, args, retVal, setRetVal) => {
+                if (!component.author || !component.author.keybase_username) return;
+                const {keybase_username, discord_id} = component.author;
+
+                if (discord_id) {
+                    // Check the Discord account has proven they and the Keybase account are the same person
+                    Logger.log('Checking proofs for Keybase username', keybase_username, 'and Discord', discord_id);
+
+                    const proofs = await this.getValidUserProofs(discord_id);
+
+                    component.keybase_integration_tooltip = `${keybase_username} (Keybase + Discord${!proofs.find(p => p.keybase === keybase_username) ? ' <b>not</b>' : ''} verified - shift + click for more information)`;
+                } else {
+                    // Show the Keybase username anyway
+                    component.keybase_integration_tooltip = `${keybase_username} (shift + click for more information)`;
+                }
+
+                component.keybase_integration_username = keybase_username;
             });
+
+            // Data function
+            ContentAuthor.data = ContentAuthor.data || (() => ({}));
+            if (ContentAuthor._Ctor) ContentAuthor._Ctor[0].options.data = ContentAuthor.data;
+
+            this.unpatchContentAuthorData = monkeyPatch(ContentAuthor._Ctor ? ContentAuthor._Ctor[0].options : ContentAuthor).after('data', (component, args, retVal) => {
+                if (!retVal) return;
+                retVal.keybase_integration_username = undefined;
+                retVal.keybase_integration_discord_verified = false;
+                retVal.keybase_integration_tooltip = undefined;
+            });
+
+            // Render function
+            this.unpatchContentAuthor = monkeyPatch(ContentAuthor._Ctor ? ContentAuthor._Ctor[0].options : ContentAuthor).after('render', (component, [createElement], retVal, setRetVal) => {
+                if (!component.keybase_integration_username) return;
+                retVal.componentOptions.children[3].children.push(this.renderContentAuthorKeybase(component, createElement));
+            });
+        }
+
+        renderContentAuthorKeybase(component, createElement) {
+            return createElement('div', {
+                staticClass: 'bd-material-button',
+                directives: [
+                    {
+                        name: "tooltip",
+                        rawName: "v-tooltip",
+                        value: component.keybase_integration_tooltip,
+                        expression: "keybase_integration_tooltip"
+                    }
+                ],
+                on: {
+                    click(event) {
+                        if (event.shiftKey) {
+                            const modal = Modals.add({
+                                Modal
+                            }, aboutContentAuthorKeybaseAccountsModal);
+                            return;
+                        }
+
+                        electron.shell.openExternal(`https://keybase.io/${component.keybase_integration_username}`);
+                    }
+                }
+            }, [this.renderMiKeybase(createElement)]);
         }
 
         renderMiKeybase(createElement) {
@@ -465,6 +513,17 @@ const joinGuildModal = {
             <h3><b>Why?</b></h3>
             <p>Proofs are posted to the #proofs channel in the Keybase Proofs server. If you're not a member of the server you can't post proofs in the #proofs channel and you can't verify other people's proofs.</p>
             <component :is="modal.Button" class="kbi-button" @click="modal.joinGuild">Join</component>
+        </div>
+    </component>`
+};
+
+const aboutContentAuthorKeybaseAccountsModal = {
+    props: ['modal'],
+    template: `<component :is="modal.Modal" class="kbi-modal kbi-about-content-author-keybase-accounts-modal" :class="{'bd-modal-out': modal.closing}" headerText="Content Author Keybase Accounts" @close="modal.close">
+        <div slot="body" class="kbi-modal-body">
+            <p>Plugins and themes cannot be verified (at least not yet), and the Keybase Integration plugin cannot check if the author's contact information is correct and the author is who they say they are. Contact information in plugins and themes is provided for your convenience. <b>If you do not trust the source of the plugin/theme, do not trust any contact information.</b> (Also don't install untrusted plugins/themes.)</p>
+            <h3><b>When I hover over the Keybase icon it says "Keybase + Discord verified".</b></h3>
+            <p>"Keybase + Discord verified" is shown in the tooltip for the Keybase account icon when there is also a Discord account in the author's contact information and they've cryptographically proven they're both the same person.</p>
         </div>
     </component>`
 };
